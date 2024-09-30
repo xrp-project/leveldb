@@ -14,6 +14,9 @@
 #include "table/format.h"
 #include "table/two_level_iterator.h"
 #include "util/coding.h"
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
 
 namespace leveldb {
 
@@ -148,6 +151,16 @@ static void ReleaseBlock(void* arg, void* h) {
   cache->Release(handle);
 }
 
+void do_fadvise(int fd, off64_t offset, off64_t len) {
+  if (fd < 0) {
+    return;
+  }
+  int ret = posix_fadvise64(fd, offset, len, POSIX_FADV_SEQUENTIAL);
+  if (ret != 0) {
+    fprintf(stderr, "posix_fadvise failed with error %d\n", ret);
+  }
+}
+
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
 Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
@@ -174,6 +187,16 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
       if (cache_handle != nullptr) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
       } else {
+        // The iterator ends up here when it needs to read a block.
+        // Handle has the size and offset of the block to read.
+        // Print the TID of the current thread.
+        if (options.is_scan) {
+          // Get the file descriptor of the file.
+          int fd = table->rep_->file->FileDescriptor();
+          off64_t offset = handle.offset();
+          off64_t len = handle.size() + kBlockTrailerSize;
+          do_fadvise(fd, offset, len);
+        }
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
           block = new Block(contents);

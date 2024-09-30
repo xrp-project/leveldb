@@ -27,6 +27,7 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <cstdint>
 
 #include "leveldb/env.h"
 #include "leveldb/slice.h"
@@ -184,6 +185,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
         fd_limiter_(fd_limiter),
         filename_(std::move(filename)) {
     if (!has_permanent_fd_) {
+      fprintf(stderr, "fd_limiter->Acquire() failed\n");
       assert(fd_ == -1);
       ::close(fd);  // The file will be opened on every read.
     }
@@ -223,6 +225,8 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     }
     return status;
   }
+
+  int FileDescriptor() const override { return fd_; }
 
  private:
   const bool has_permanent_fd_;  // If false, the file is opened on every read.
@@ -783,25 +787,7 @@ int MaxMmaps() { return g_mmap_limit; }
 
 // Return the maximum number of read-only files to keep open.
 int MaxOpenFiles() {
-  if (g_open_read_only_file_limit >= 0) {
-    return g_open_read_only_file_limit;
-  }
-#ifdef __Fuchsia__
-  // Fuchsia doesn't implement getrlimit.
-  g_open_read_only_file_limit = 50;
-#else
-  struct ::rlimit rlim;
-  if (::getrlimit(RLIMIT_NOFILE, &rlim)) {
-    // getrlimit failed, fallback to hard-coded default.
-    g_open_read_only_file_limit = 50;
-  } else if (rlim.rlim_cur == RLIM_INFINITY) {
-    g_open_read_only_file_limit = std::numeric_limits<int>::max();
-  } else {
-    // Allow use of 20% of available file descriptors for read-only files.
-    g_open_read_only_file_limit = rlim.rlim_cur / 5;
-  }
-#endif
-  return g_open_read_only_file_limit;
+  return INT32_MAX;
 }
 
 }  // namespace

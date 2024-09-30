@@ -162,6 +162,9 @@ struct LEVELDB_EXPORT ReadOptions {
   // not have been released).  If "snapshot" is null, use an implicit
   // snapshot of the state at the beginning of this read operation.
   const Snapshot* snapshot = nullptr;
+
+  // Is this read part of a scan
+  bool is_scan = false;
 };
 
 // Options that control write operations

@@ -269,6 +269,11 @@ class LEVELDB_EXPORT RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const = 0;
+
+  // Optional virtual function to return file descriptor of the open file.
+  // Default implementation returns -1 to indicate that this feature is
+  // not supported.
+  virtual int FileDescriptor() const { return -1; }
 };
 
 // A file abstraction for sequential writing.  The implementation
