@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_INCLUDE_OPTIONS_H_
 
 #include <cstddef>
+#include <fcntl.h>
 
 #include "leveldb/export.h"
 
@@ -165,6 +166,9 @@ struct LEVELDB_EXPORT ReadOptions {
 
   // Is this read part of a scan
   bool is_scan = false;
+
+  // Use an fadvise, only if is_scan is true
+  int fadvise_hint = POSIX_FADV_NOREUSE;
 };
 
 // Options that control write operations

@@ -151,11 +151,19 @@ static void ReleaseBlock(void* arg, void* h) {
   cache->Release(handle);
 }
 
-void do_fadvise(int fd, off64_t offset, off64_t len) {
+bool use_this_hint_before_io(int hint) {
+  return hint == POSIX_FADV_SEQUENTIAL || hint == POSIX_FADV_NOREUSE;
+}
+
+bool use_this_hint_after_io(int hint) {
+  return hint == POSIX_FADV_DONTNEED;
+}
+
+void do_fadvise(int fd, off64_t offset, off64_t len, int hint) {
   if (fd < 0) {
     return;
   }
-  int ret = posix_fadvise64(fd, offset, len, POSIX_FADV_SEQUENTIAL);
+  int ret = posix_fadvise64(fd, offset, len, hint);
   if (ret != 0) {
     fprintf(stderr, "posix_fadvise failed with error %d\n", ret);
   }
@@ -189,13 +197,12 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
       } else {
         // The iterator ends up here when it needs to read a block.
         // Handle has the size and offset of the block to read.
-        // Print the TID of the current thread.
-        if (options.is_scan) {
+        if (options.is_scan && use_this_hint_before_io(options.fadvise_hint)) {
           // Get the file descriptor of the file.
           int fd = table->rep_->file->FileDescriptor();
           off64_t offset = handle.offset();
           off64_t len = handle.size() + kBlockTrailerSize;
-          do_fadvise(fd, offset, len);
+          do_fadvise(fd, offset, len, options.fadvise_hint);
         }
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
@@ -204,6 +211,13 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
             cache_handle = block_cache->Insert(key, block, block->size(),
                                                &DeleteCachedBlock);
           }
+        }
+        if (options.is_scan && use_this_hint_after_io(options.fadvise_hint)) {
+          // Get the file descriptor of the file.
+          int fd = table->rep_->file->FileDescriptor();
+          off64_t offset = handle.offset();
+          off64_t len = handle.size() + kBlockTrailerSize;
+          do_fadvise(fd, offset, len, options.fadvise_hint);
         }
       }
     } else {
